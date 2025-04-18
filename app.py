@@ -3,49 +3,93 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import os
+import io
 from urllib.parse import urlparse
+import PyPDF2
+from pdfminer.high_level import extract_text as pdfminer_extract_text
 
 app = Flask(__name__)
 
 # Configuration
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max file size
-app.config['UPLOAD_EXTENSIONS'] = ['.txt']
+app.config['UPLOAD_EXTENSIONS'] = ['.txt', '.pdf']  # Updated for v0.2
 app.config['REQUEST_TIMEOUT'] = 10  # seconds
 
 # British/American English spelling dictionary
 # Format: (British English, American English)
 SPELLING_DICTIONARY = [
-    ('colour', 'color'),
-    ('behaviour', 'behavior'),
-    ('centre', 'center'),
+    ('aluminium', 'aluminum'),
     ('analyse', 'analyze'),
-    ('optimise', 'optimize'),
-    ('licence', 'license'),
-    ('defence', 'defense'),
-    ('modelling', 'modeling'),
-    ('travelled', 'traveled'),
-    ('programme', 'program'),
-    ('organisation', 'organization'),
-    ('realise', 'realize'),
-    ('favourite', 'favorite'),
-    ('dialogue', 'dialog'),
-    ('metre', 'meter'),
-    ('flavour', 'flavor'),
-    ('theatre', 'theater'),
-    ('labour', 'labor'),
-    ('neighbour', 'neighbor'),
-    ('cosy', 'cozy'),
     ('apologise', 'apologize'),
-    ('speciality', 'specialty'),
-    ('cheque', 'check'),
+    ('behaviour', 'behavior'),
     ('catalogue', 'catalog'),
+    ('cheque', 'check'),
+    ('centre', 'center'),
+    ('colour', 'color'),
+    ('cosy', 'cozy'),
+    ('defence', 'defense'),
+    ('dialogue', 'dialog'),
+    ('favourite', 'favorite'),
+    ('flavour', 'flavor'),
+    ('fulfil', 'fulfill'),
     ('grey', 'gray'),
     ('jewellery', 'jewelry'),
+    ('labour', 'labor'),
+    ('licence', 'license'),
+    ('metre', 'meter'),
+    ('modelling', 'modeling'),
+    ('neighbour', 'neighbor'),
+    ('travelling', 'traveling'),
+    ('travelled', 'traveled'),
+    ('plough', 'plow'),
+    ('programme', 'program'),
     ('pyjamas', 'pajamas'),
+    ('optimise', 'optimize'),
+    ('organisation', 'organization'),
+    ('realise', 'realize'),
+    ('savour', 'savor'),
+    ('sceptical', 'skeptical'),
+    ('speciality', 'specialty'),
+    ('sulphur', 'sulfur'),
+    ('theatre', 'theater'),
     ('tyre', 'tire'),
-    ('aluminium', 'aluminum'),
-    ('fulfil', 'fulfill'),
+    ('whisky', 'whiskey'),
 ]
+
+def extract_text_from_pdf(pdf_file):
+    """Extract text from a PDF file using both PyPDF2 and pdfminer.six for maximum compatibility."""
+    try:
+        # First try with PyPDF2
+        pdf_content = ""
+        file_stream = io.BytesIO(pdf_file.read())
+        # Reset file pointer to beginning for PyPDF2
+        file_stream.seek(0)
+        
+        reader = PyPDF2.PdfReader(file_stream)
+        if len(reader.pages) == 0:
+            raise ValueError("PDF file contains no pages")
+            
+        for page_num in range(len(reader.pages)):
+            page = reader.pages[page_num]
+            pdf_content += page.extract_text() + " "
+            
+        # If PyPDF2 extracted meaningful content, return it
+        if pdf_content.strip():
+            return pdf_content
+            
+        # If PyPDF2 failed to extract meaningful content, try with pdfminer
+        # Reset file pointer to beginning for pdfminer
+        file_stream.seek(0)
+        pdf_content = pdfminer_extract_text(file_stream)
+        
+        if not pdf_content.strip():
+            raise ValueError("Could not extract text from the PDF. It may be scanned without OCR or corrupted.")
+            
+        return pdf_content
+        
+    except Exception as e:
+        # Re-raise with a more user-friendly message
+        raise ValueError(f"Failed to extract text from PDF: {str(e)}")
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -66,13 +110,21 @@ def index():
             file_ext = os.path.splitext(uploaded_file.filename)[1].lower()
             
             if file_ext not in app.config['UPLOAD_EXTENSIONS']:
-                error_message = "Invalid file type. Please upload a .txt file."
+                error_message = f"Invalid file type. Please upload a {' or '.join(app.config['UPLOAD_EXTENSIONS'])} file."
             else:
                 try:
-                    text_content = uploaded_file.read().decode('utf-8')
+                    if file_ext == '.txt':
+                        # Process text file
+                        text_content = uploaded_file.read().decode('utf-8')
+                    elif file_ext == '.pdf':
+                        # Process PDF file (v0.2 feature)
+                        text_content = extract_text_from_pdf(uploaded_file)
+                    
                     analysis_results = analyze_text(text_content)
+                except ValueError as e:
+                    error_message = str(e)
                 except Exception as e:
-                    error_message = f"Error reading file: {str(e)}"
+                    error_message = f"Error processing file: {str(e)}"
                     
         elif request.form.get('url_input') and request.form.get('url_input').strip():
             # URL input
