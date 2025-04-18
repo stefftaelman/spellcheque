@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>British/American English Spelling Checker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Spell Cheque</h1>
+            <p class="description">Analyze text to determine British vs. American English spelling variations.</p>
+        </header>
+
+        <main>
+            <section class="input-section">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="text_input">Paste Text Here:</label>
+                        <textarea id="text_input" name="text_input" rows="6" placeholder="Enter or paste your text here for analysis..."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="file_upload">Upload .txt File:</label>
+                        <input type="file" id="file_upload" name="file_upload" accept=".txt">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="url_input">Enter URL:</label>
+                        <input type="text" id="url_input" name="url_input" placeholder="https://example.com">
+                    </div>
+
+                    <div class="form-group">
+                        <button type="submit" class="analyze-btn">Analyze Text</button>
+                    </div>
+                </form>
+            </section>
+
+            {% if error_message %}
+            <section class="error-section">
+                <div class="error-message">
+                    <p>{{ error_message }}</p>
+                </div>
+            </section>
+            {% endif %}
+
+            {% if analysis_results %}
+            <section class="results-section">
+                <h2>Spelling Analysis Results</h2>
+                
+                {% if analysis_results.total_found > 0 %}
+                <div class="chart-container">
+                    <canvas id="spellingChart"></canvas>
+                </div>
+
+                <div class="summary-stats">
+                    <p><strong>Total words analyzed with spelling variations:</strong> {{ analysis_results.total_found }}</p>
+                    <p><strong>British English spellings:</strong> {{ analysis_results.british_count }} ({{ analysis_results.british_percentage|round(1) }}%)</p>
+                    <p><strong>American English spellings:</strong> {{ analysis_results.american_count }} ({{ analysis_results.american_percentage|round(1) }}%)</p>
+                </div>
+
+                <h3>Detailed Word Analysis</h3>
+                <div class="table-container">
+                    <table class="word-table">
+                        <thead>
+                            <tr>
+                                <th>British Spelling</th>
+                                <th>American Spelling</th>
+                                <th>British Count</th>
+                                <th>American Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for word in analysis_results.found_words_summary %}
+                            <tr>
+                                <td>{{ word.bre_spelling }}</td>
+                                <td>{{ word.ame_spelling }}</td>
+                                <td>{{ word.bre_count }}</td>
+                                <td>{{ word.ame_count }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="no-results">
+                    <p>No relevant British/American spelling variations found in the provided text based on the current dictionary.</p>
+                </div>
+                {% endif %}
+            </section>
+            {% endif %}
+        </main>
+
+        <footer>
+            <p>&copy; 2025 British/American English Spelling Checker</p>
+        </footer>
+    </div>
+
+    {% if analysis_results and analysis_results.total_found > 0 %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const ctx = document.getElementById('spellingChart').getContext('2d');
+            const spellingChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['British English', 'American English'],
+                    datasets: [{
+                        data: [{{ analysis_results.british_count }}, {{ analysis_results.american_count }}],
+                        backgroundColor: [
+                            '#1e88e5', // British - blue
+                            '#d32f2f'  // American - red
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+    {% endif %}
+</body>
+</html>
