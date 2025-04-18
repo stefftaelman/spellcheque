@@ -1,20 +1,24 @@
 /* 
    styles.css - British/American English Spelling Checker
-   Clean, minimalist aesthetic with focus on functionality
+   Dark mode theme with amber highlight color
 */
 
 /* Base Styles */
 :root {
-    --primary-color: #1976d2;
+    --primary-color: #ffc145;
     --secondary-color: #e53935;
-    --background-color: #f5f5f5;
-    --container-bg: #ffffff;
-    --text-color: #333333;
-    --border-color: #dddddd;
-    --error-color: #d32f2f;
-    --success-color: #388e3c;
+    --background-color: #121212;
+    --container-bg: #1e1e1e;
+    --text-color: #f5f5f5;
+    --border-color: #333333;
+    --error-color: #ff5252;
+    --success-color: #4caf50;
     --british-color: #1e88e5;
     --american-color: #d32f2f;
+    --input-bg: #2d2d2d;
+    --table-header-bg: #333333;
+    --table-hover-bg: #2a2a2a;
+    --summary-bg: #262626;
 }
 
 * {
@@ -52,7 +56,7 @@ h1 {
 }
 
 .description {
-    color: #666;
+    color: #bbb;
     font-size: 1.1em;
 }
 
@@ -77,12 +81,14 @@ textarea, input[type="text"] {
     border: 1px solid var(--border-color);
     border-radius: 4px;
     font-size: 16px;
+    background-color: var(--input-bg);
+    color: var(--text-color);
 }
 
 textarea:focus, input[type="text"]:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
+    box-shadow: 0 0 0 2px rgba(255, 193, 69, 0.2);
 }
 
 input[type="file"] {
@@ -90,21 +96,24 @@ input[type="file"] {
     padding: 10px;
     border-radius: 4px;
     width: 100%;
+    background-color: var(--input-bg);
+    color: var(--text-color);
 }
 
 .analyze-btn {
     background-color: var(--primary-color);
-    color: white;
+    color: #121212;
     border: none;
     padding: 12px 24px;
     font-size: 16px;
     border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.3s;
+    font-weight: bold;
 }
 
 .analyze-btn:hover {
-    background-color: #1565c0;
+    background-color: #e0a800;
 }
 
 /* Error Messages */
@@ -113,10 +122,11 @@ input[type="file"] {
 }
 
 .error-message {
-    background-color: #ffebee;
+    background-color: rgba(255, 82, 82, 0.15);
     border-left: 4px solid var(--error-color);
     padding: 15px;
     border-radius: 4px;
+    color: var(--text-color);
 }
 
 /* Results Section */
@@ -131,7 +141,7 @@ h2 {
 
 h3 {
     margin: 20px 0 15px;
-    color: #444;
+    color: var(--text-color);
 }
 
 .chart-container {
@@ -140,7 +150,7 @@ h3 {
 }
 
 .summary-stats {
-    background-color: #f7f7f7;
+    background-color: var(--summary-bg);
     padding: 15px;
     border-radius: 4px;
     margin-bottom: 20px;
@@ -161,27 +171,23 @@ h3 {
     margin-top: 15px;
 }
 
-.word-table th, .word-table td {
-    padding: 12px 15px;
-    text-align: left;
-    border-bottom: 1px solid var(--border-color);
-}
-
 .word-table th {
-    background-color: #f0f0f0;
+    background-color: var(--table-header-bg);
     font-weight: 600;
+    color: var(--text-color);
 }
 
 .word-table tr:hover {
-    background-color: #f9f9f9;
+    background-color: var(--table-hover-bg);
 }
 
 /* No Results */
 .no-results {
-    background-color: #e8f5e9;
+    background-color: rgba(76, 175, 80, 0.15);
     padding: 15px;
     border-radius: 4px;
     margin-top: 20px;
+    color: var(--text-color);
 }
 
 /* Footer */
@@ -190,7 +196,7 @@ footer {
     margin-top: 40px;
     padding-top: 20px;
     border-top: 1px solid var(--border-color);
-    color: #666;
+    color: #aaa;
 }
 
 /* Responsive Design */
