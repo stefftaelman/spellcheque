@@ -76,8 +76,8 @@
                         <tbody>
                             {% for word in analysis_results.found_words_summary %}
                             <tr>
-                                <td>{{ word.bre_spelling }}</td>
-                                <td>{{ word.ame_spelling }}</td>
+                                <td class="british-word">{{ word.bre_spelling }}</td>
+                                <td class="american-word">{{ word.ame_spelling }}</td>
                                 <td>{{ word.bre_count }}</td>
                                 <td>{{ word.ame_count }}</td>
                             </tr>
@@ -97,6 +97,24 @@
         <footer>
             <p>&copy; 2025 British/American English Spelling Checker</p>
         </footer>
+        
+        <!-- Store original text in a hidden element -->
+        <div id="original-text-container" style="display: none;">
+            {{ original_text | safe }}
+        </div>
+        
+        <!-- Modal for displaying highlighted text -->
+        <div id="highlight-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="highlight-modal-title">Highlighted Text</h2>
+                    <span class="close-modal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div id="highlighted-text"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     {% if analysis_results and analysis_results.total_found > 0 %}
@@ -143,7 +161,134 @@
                     }
                 }
             });
+            
+            // Make words in the table clickable
+            const britishWords = document.querySelectorAll('.british-word');
+            const americanWords = document.querySelectorAll('.american-word');
+            
+            britishWords.forEach(word => {
+                word.classList.add('clickable-word');
+                word.addEventListener('click', function() {
+                    highlightWord(this.textContent, 'british');
+                });
+            });
+            
+            americanWords.forEach(word => {
+                word.classList.add('clickable-word');
+                word.addEventListener('click', function() {
+                    highlightWord(this.textContent, 'american');
+                });
+            });
+            
+            // Close modal when clicking the X
+            document.querySelector('.close-modal').addEventListener('click', function() {
+                document.getElementById('highlight-modal').style.display = 'none';
+                
+                // Remove selected-word class from all words
+                document.querySelectorAll('.selected-word').forEach(el => {
+                    el.classList.remove('selected-word');
+                });
+            });
+            
+            // Close modal when clicking outside the content
+            window.addEventListener('click', function(event) {
+                if (event.target === document.getElementById('highlight-modal')) {
+                    document.getElementById('highlight-modal').style.display = 'none';
+                    
+                    // Remove selected-word class from all words
+                    document.querySelectorAll('.selected-word').forEach(el => {
+                        el.classList.remove('selected-word');
+                    });
+                }
+            });
         });
+        
+        function highlightWord(word, variant) {
+            // Get the original text
+            const originalText = document.getElementById('original-text-container').textContent;
+            
+            // Get both British and American forms of the word
+            let britishWord, americanWord;
+            if (variant === 'british') {
+                britishWord = word;
+                // Find the corresponding American spelling
+                const row = Array.from(document.querySelectorAll('.british-word')).find(el => 
+                    el.textContent.toLowerCase() === word.toLowerCase());
+                if (row) {
+                    const tableRow = row.closest('tr');
+                    americanWord = tableRow.querySelector('.american-word').textContent;
+                }
+            } else {
+                americanWord = word;
+                // Find the corresponding British spelling
+                const row = Array.from(document.querySelectorAll('.american-word')).find(el => 
+                    el.textContent.toLowerCase() === word.toLowerCase());
+                if (row) {
+                    const tableRow = row.closest('tr');
+                    britishWord = tableRow.querySelector('.british-word').textContent;
+                }
+            }
+            
+            // Preserve line breaks and paragraphs in the original text
+            // Replace \n with <br> and preserve paragraph structure
+            let formattedText = originalText
+                .replace(/\n\n/g, '</p><p>') // Double line breaks indicate paragraphs
+                .replace(/\n/g, '<br>'); // Single line breaks
+            
+            // Wrap the text in paragraph tags if it doesn't start with one
+            if (!formattedText.startsWith('<p>')) {
+                formattedText = '<p>' + formattedText;
+            }
+            if (!formattedText.endsWith('</p>')) {
+                formattedText = formattedText + '</p>';
+            }
+            
+            // Create highlighted text by replacing both variants
+            let highlightedText = formattedText;
+            
+            // Highlight British spelling if it exists
+            if (britishWord) {
+                const britishRegex = new RegExp('\\b(' + escapeRegExp(britishWord) + ')\\b', 'gi');
+                highlightedText = highlightedText.replace(britishRegex, 
+                    '<span class="british-highlight">$1</span>');
+            }
+            
+            // Highlight American spelling if it exists
+            if (americanWord) {
+                const americanRegex = new RegExp('\\b(' + escapeRegExp(americanWord) + ')\\b', 'gi');
+                highlightedText = highlightedText.replace(americanRegex, 
+                    '<span class="american-highlight">$1</span>');
+            }
+            
+            // Set the highlighted text in the modal
+            document.getElementById('highlighted-text').innerHTML = highlightedText;
+            
+            // Set the modal title to indicate both spellings are highlighted
+            document.getElementById('highlight-modal-title').textContent = 
+                variant === 'british' 
+                    ? `Highlighting "${britishWord}" (British) and "${americanWord}" (American)` 
+                    : `Highlighting "${britishWord}" (British) and "${americanWord}" (American)`;
+            
+            // Show the modal
+            document.getElementById('highlight-modal').style.display = 'block';
+            
+            // Mark clicked word as selected in the table
+            document.querySelectorAll('.selected-word').forEach(el => {
+                el.classList.remove('selected-word');
+            });
+            
+            const selector = variant === 'british' ? '.british-word' : '.american-word';
+            document.querySelectorAll(selector).forEach(el => {
+                if (el.textContent.toLowerCase() === word.toLowerCase()) {
+                    el.classList.add('selected-word');
+                }
+            });
+        }
+        
+        // Helper function to escape special characters in regex
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
     </script>
     {% endif %}
 </body>

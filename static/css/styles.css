@@ -19,6 +19,8 @@
     --table-header-bg: #333333;
     --table-hover-bg: #2a2a2a;
     --summary-bg: #262626;
+    --modal-bg: #1e1e1e;
+    --modal-overlay: rgba(0, 0, 0, 0.7);
 }
 
 * {
@@ -179,6 +181,135 @@ h3 {
 
 .word-table tr:hover {
     background-color: var(--table-hover-bg);
+}
+
+.word-table th, .word-table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Clickable words in table */
+.british-word, .american-word {
+    cursor: pointer;
+    color: var(--text-color);
+    text-decoration: underline;
+    text-decoration-color: var(--primary-color);
+    transition: all 0.2s ease;
+}
+
+.british-word {
+    color: var(--british-color);
+}
+
+.american-word {
+    color: var(--american-color);
+}
+
+.british-word:hover, .american-word:hover {
+    text-decoration: none;
+    opacity: 0.8;
+}
+
+.selected-word {
+    background-color: rgba(255, 193, 69, 0.2);
+    font-weight: bold;
+}
+
+/* Modal styles for word highlighting */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: var(--modal-overlay);
+}
+
+.modal-content {
+    background-color: var(--modal-bg);
+    margin: 5% auto;
+    padding: 25px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    width: 80%;
+    max-width: 900px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 15px;
+    margin-bottom: 20px;
+}
+
+.modal-header h2 {
+    margin: 0;
+    color: var(--primary-color);
+}
+
+.close-modal {
+    color: #aaa;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.close-modal:hover {
+    color: var(--primary-color);
+}
+
+.modal-body {
+    line-height: 1.7;
+    max-height: calc(80vh - 80px);
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
+/* Enhanced text formatting for highlighted content */
+#highlighted-text {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.7;
+    white-space: pre-line; /* Preserve line breaks even without <br> tags */
+}
+
+#highlighted-text p {
+    margin-bottom: 1.2em;
+    text-align: justify;
+}
+
+#highlighted-text br {
+    display: block;
+    content: "";
+    margin-top: 0.5em;
+}
+
+/* Text highlighting styles */
+.british-highlight {
+    background-color: rgba(30, 136, 229, 0.3);
+    padding: 2px 0;
+    border-radius: 3px;
+    border-bottom: 1px solid var(--british-color);
+}
+
+.american-highlight {
+    background-color: rgba(211, 47, 47, 0.3);
+    padding: 2px 0;
+    border-radius: 3px;
+    border-bottom: 1px solid var(--american-color);
+}
+
+#original-text-container {
+    display: none;
 }
 
 /* No Results */
