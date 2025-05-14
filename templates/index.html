@@ -6,6 +6,14 @@
     <title>British/American English Spelling Checker</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PDF.js library for PDF viewing and highlighting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script>
+        // Set PDF.js worker path
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+        }
+    </script>
 </head>
 <body>
     <div class="container">
@@ -63,6 +71,12 @@
                 </div>
 
                 <h3>Detailed Word Analysis</h3>
+                <div class="action-buttons">
+                    <button id="show-all-highlights-btn" class="highlight-btn">Show All Spelling Variations in Text</button>
+                    {% if pdf_id %}
+                    <button id="show-pdf-highlights-btn" class="highlight-btn pdf-btn">View Original PDF with Highlights</button>
+                    {% endif %}
+                </div>
                 <div class="table-container">
                     <table class="word-table">
                         <thead>
@@ -115,6 +129,42 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Modal for PDF viewing with highlights -->
+        {% if pdf_id %}
+        <div id="pdf-highlight-modal" class="modal pdf-modal">
+            <div class="modal-content pdf-modal-content">
+                <div class="modal-header">
+                    <h2 id="pdf-highlight-modal-title">PDF with Highlighted Words</h2>
+                    <span class="close-pdf-modal">&times;</span>
+                </div>
+                <div class="modal-body pdf-viewer-container">
+                    <div class="pdf-controls">
+                        <button id="prev-page" class="pdf-control-btn">Previous</button>
+                        <span id="page-info">Page <span id="page-num"></span> of <span id="page-count"></span></span>
+                        <button id="next-page" class="pdf-control-btn">Next</button>
+                        <select id="highlight-mode" class="pdf-control-select">
+                            <option value="all">Show All Highlights</option>
+                            <option value="british">British Words Only</option>
+                            <option value="american">American Words Only</option>
+                            <option value="none">No Highlights</option>
+                        </select>
+                        <div class="debug-controls">
+                            <label>
+                                <input type="checkbox" id="debug-mode" class="debug-checkbox">
+                                Debug Mode
+                            </label>
+                        </div>
+                    </div>
+                    <div class="pdf-canvas-container">
+                        <canvas id="pdf-canvas"></canvas>
+                        <div id="pdf-text-layer" class="pdf-text-layer"></div>
+                        <div id="pdf-annotation-layer" class="pdf-annotation-layer"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     {% if analysis_results and analysis_results.total_found > 0 %}
@@ -201,6 +251,11 @@
                     });
                 }
             });
+            
+            // "Show All Spelling Variations" button functionality
+            document.getElementById('show-all-highlights-btn').addEventListener('click', function() {
+                highlightAllWords();
+            });
         });
         
         function highlightWord(word, variant) {
@@ -285,10 +340,402 @@
             });
         }
         
+        function highlightAllWords() {
+            // Get the original text
+            const originalText = document.getElementById('original-text-container').textContent;
+            
+            // Preserve line breaks and paragraphs in the original text
+            let formattedText = originalText
+                .replace(/\n\n/g, '</p><p>') // Double line breaks indicate paragraphs
+                .replace(/\n/g, '<br>'); // Single line breaks
+            
+            // Wrap the text in paragraph tags if it doesn't start with one
+            if (!formattedText.startsWith('<p>')) {
+                formattedText = '<p>' + formattedText;
+            }
+            if (!formattedText.endsWith('</p>')) {
+                formattedText = formattedText + '</p>';
+            }
+            
+            // Create highlighted text by replacing all British and American variants
+            let highlightedText = formattedText;
+            
+            // Get all British-American word pairs from the table
+            const wordPairs = [];
+            const rows = document.querySelectorAll('.word-table tbody tr');
+            
+            rows.forEach(row => {
+                const britishWord = row.querySelector('.british-word').textContent;
+                const americanWord = row.querySelector('.american-word').textContent;
+                wordPairs.push({ british: britishWord, american: americanWord });
+            });
+            
+            // Highlight all words in the text
+            wordPairs.forEach(pair => {
+                // Highlight British spelling
+                const britishRegex = new RegExp('\\b(' + escapeRegExp(pair.british) + ')\\b', 'gi');
+                highlightedText = highlightedText.replace(britishRegex, 
+                    '<span class="british-highlight">$1</span>');
+                
+                // Highlight American spelling
+                const americanRegex = new RegExp('\\b(' + escapeRegExp(pair.american) + ')\\b', 'gi');
+                highlightedText = highlightedText.replace(americanRegex, 
+                    '<span class="american-highlight">$1</span>');
+            });
+            
+            // Set the highlighted text in the modal
+            document.getElementById('highlighted-text').innerHTML = highlightedText;
+            
+            // Set the modal title
+            document.getElementById('highlight-modal-title').textContent = 
+                'All British (blue) and American (red) Spelling Variations';
+            
+            // Show the modal
+            document.getElementById('highlight-modal').style.display = 'block';
+        }
+        
         // Helper function to escape special characters in regex
         function escapeRegExp(string) {
             return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         }
+
+        {% if pdf_id %}
+        // PDF Viewer with highlighting functionality
+        let pdfDoc = null;
+        let pageNum = 1;
+        let pageRendering = false;
+        let pageNumPending = null;
+        let scale = 1.5;
+        let canvas = document.getElementById('pdf-canvas');
+        let ctx = canvas.getContext('2d');
+        
+        // Get all British/American word pairs for highlighting
+        const pdfWordPairs = [];
+        document.querySelectorAll('.word-table tbody tr').forEach(row => {
+            const britishWord = row.querySelector('.british-word').textContent.toLowerCase();
+            const americanWord = row.querySelector('.american-word').textContent.toLowerCase();
+            pdfWordPairs.push({ british: britishWord, american: americanWord });
+        });
+        
+        // Initialize PDF.js with the PDF file URL
+        const loadingTask = pdfjsLib.getDocument('{{ url_for("serve_pdf", pdf_id=pdf_id) }}');
+        loadingTask.promise.then(function(pdf) {
+            pdfDoc = pdf;
+            document.getElementById('page-count').textContent = pdf.numPages;
+            
+            // Initial render of first page
+            renderPage(pageNum);
+        });
+        
+        // PDF viewer event listeners
+        document.getElementById('show-pdf-highlights-btn').addEventListener('click', function() {
+            document.getElementById('pdf-highlight-modal').style.display = 'block';
+            // Ensure the canvas is rendered properly
+            if (!pageRendering) {
+                renderPage(pageNum);
+            }
+        });
+        
+        document.querySelector('.close-pdf-modal').addEventListener('click', function() {
+            document.getElementById('pdf-highlight-modal').style.display = 'none';
+        });
+        
+        // Close PDF modal when clicking outside the content
+        window.addEventListener('click', function(event) {
+            if (event.target === document.getElementById('pdf-highlight-modal')) {
+                document.getElementById('pdf-highlight-modal').style.display = 'none';
+            }
+        });
+        
+        // Previous page button
+        document.getElementById('prev-page').addEventListener('click', function() {
+            if (pageNum <= 1) {
+                return;
+            }
+            pageNum--;
+            queueRenderPage(pageNum);
+        });
+        
+        // Next page button
+        document.getElementById('next-page').addEventListener('click', function() {
+            if (pageNum >= pdfDoc.numPages) {
+                return;
+            }
+            pageNum++;
+            queueRenderPage(pageNum);
+        });
+        
+        // Highlight mode select
+        document.getElementById('highlight-mode').addEventListener('change', function() {
+            // Re-render the current page with the new highlight mode
+            renderPage(pageNum);
+        });
+        
+        // Debug mode toggle
+        document.getElementById('debug-mode').addEventListener('change', function() {
+            const annotationLayer = document.getElementById('pdf-annotation-layer');
+            if (this.checked) {
+                annotationLayer.classList.add('debug-mode-active');
+            } else {
+                annotationLayer.classList.remove('debug-mode-active');
+            }
+            
+            // Re-render the current page to make sure debug info is displayed
+            renderPage(pageNum);
+        });
+
+        // Render a specific page and highlight words
+        function renderPage(num) {
+            pageRendering = true;
+            
+            // Update page number display
+            document.getElementById('page-num').textContent = num;
+            
+            // Get current highlight mode
+            const highlightMode = document.getElementById('highlight-mode').value;
+            
+            // Get the page
+            pdfDoc.getPage(num).then(function(page) {
+                // Adjust canvas size to the page
+                const viewport = page.getViewport({ scale: scale });
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                // Render the PDF page
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport: viewport
+                };
+                
+                const renderTask = page.render(renderContext);
+                
+                // After rendering the page, get the text content and apply highlights
+                renderTask.promise.then(function() {
+                    // Clear previous highlights
+                    const annotationLayer = document.getElementById('pdf-annotation-layer');
+                    annotationLayer.innerHTML = '';
+                    annotationLayer.style.width = canvas.width + 'px';
+                    annotationLayer.style.height = canvas.height + 'px';
+                    
+                    // If not highlighting, just return
+                    if (highlightMode === 'none') {
+                        pageRendering = false;
+                        if (pageNumPending !== null) {
+                            renderPage(pageNumPending);
+                            pageNumPending = null;
+                        }
+                        return;
+                    }
+                    
+                    // Get the text content
+                    return page.getTextContent().then(function(textContent) {
+                        // Create text items array
+                        const textItems = textContent.items;
+                        
+                        // For PDFs, text is often split across multiple textContent items
+                        // We'll try to merge adjacent items with similar positions to form complete words
+                        const mergedTextItems = [];
+                        let currentItem = null;
+                        
+                        textItems.forEach(function(item) {
+                            if (!currentItem) {
+                                currentItem = Object.assign({}, item);
+                                return;
+                            }
+                            
+                            // Check if this item appears to be adjacent to the current one
+                            // Check vertical position (y-coord) and font size similarity
+                            const yDiff = Math.abs(currentItem.transform[5] - item.transform[5]);
+                            const fontSizeCurrent = Math.sqrt(currentItem.transform[2] * currentItem.transform[2] + 
+                                                             currentItem.transform[3] * currentItem.transform[3]);
+                            const fontSizeItem = Math.sqrt(item.transform[2] * item.transform[2] + 
+                                                          item.transform[3] * item.transform[3]);
+                            const fontSizeDiff = Math.abs(fontSizeCurrent - fontSizeItem);
+                            
+                            // If items are roughly on the same line and have similar font size
+                            if (yDiff < fontSizeCurrent * 0.2 && fontSizeDiff < 2) {
+                                // Calculate expected x position of this item based on previous item
+                                const prevEndX = currentItem.transform[4] + 
+                                                (currentItem.str.length * fontSizeCurrent * 0.6);
+                                const spaceWidth = fontSizeCurrent * 0.4; // Estimate space width
+                                
+                                // If the start x position of this item is close to where we expect the end of the previous item
+                                // could be adjacent characters in the same word
+                                if (Math.abs(item.transform[4] - prevEndX) < spaceWidth * 1.5) {
+                                    // Merge with current item (append text and keep position of current item)
+                                    currentItem.str += item.str;
+                                    return;
+                                }
+                            }
+                            
+                            // Not adjacent or same line, store current item and start a new one
+                            mergedTextItems.push(currentItem);
+                            currentItem = Object.assign({}, item);
+                        });
+                        
+                        // Don't forget the last item
+                        if (currentItem) {
+                            mergedTextItems.push(currentItem);
+                        }
+                        
+                        // Now process the merged text items for highlighting
+                        mergedTextItems.forEach(function(item) {
+                            const text = item.str.toLowerCase();
+                            
+                            // Check each word pair
+                            pdfWordPairs.forEach(function(pair) {
+                                // Check British spelling if applicable
+                                if ((highlightMode === 'all' || highlightMode === 'british') && 
+                                    text.includes(pair.british)) {
+                                    // Highlight British spelling
+                                    highlightTextInPdf(item, pair.british, viewport, 'british-pdf-highlight');
+                                }
+                                
+                                // Check American spelling if applicable
+                                if ((highlightMode === 'all' || highlightMode === 'american') && 
+                                    text.includes(pair.american)) {
+                                    // Highlight American spelling
+                                    highlightTextInPdf(item, pair.american, viewport, 'american-pdf-highlight');
+                                }
+                            });
+                        });
+                        
+                        pageRendering = false;
+                        if (pageNumPending !== null) {
+                            renderPage(pageNumPending);
+                            pageNumPending = null;
+                        }
+                    });
+                });
+            });
+        }
+        
+        // Queue rendering if already in progress
+        function queueRenderPage(num) {
+            if (pageRendering) {
+                pageNumPending = num;
+            } else {
+                renderPage(num);
+            }
+        }
+        
+        // Helper function to highlight text in the PDF
+        function highlightTextInPdf(textItem, word, viewport, highlightClass) {
+            // Get original text and word in their original cases
+            const originalText = textItem.str;
+            const lowercaseText = originalText.toLowerCase();
+            
+            // Find the word index using case-insensitive search
+            const wordIndex = lowercaseText.indexOf(word.toLowerCase());
+            if (wordIndex === -1) return; // Word not found in this text item
+            
+            // Create a highlight element
+            const highlight = document.createElement('div');
+            highlight.className = highlightClass;
+            
+            // The text position is defined by the text's transform matrix
+            const transform = textItem.transform;
+            
+            // Get the actual word as it appears in the text (preserving case)
+            const actualWord = originalText.substr(wordIndex, word.length);
+            
+            // We need to create a temporary canvas to measure text dimensions precisely
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            // Calculate font size from the transform matrix
+            // The PDF.js transform matrix is [a b c d e f] where e,f are position
+            const fontSize = Math.sqrt((transform[2] * transform[2]) + (transform[3] * transform[3]));
+            
+            // Set a font that approximates PDF fonts
+            tempCtx.font = `${fontSize}px sans-serif`;
+            
+            // Important: PDF coordinates have the origin at the BOTTOM left
+            // while CSS coordinates have the origin at the TOP left
+            
+            // For correct positioning, we need:
+            // 1. The width of text before our target word
+            let beforeWordWidth = 0;
+            if (wordIndex > 0) {
+                const beforeText = originalText.substring(0, wordIndex);
+                beforeWordWidth = tempCtx.measureText(beforeText).width;
+            }
+            
+            // 2. The width of the target word
+            const wordWidth = tempCtx.measureText(actualWord).width;
+            
+            // 3. Calculate position based on the PDF coordinate system and transform matrix
+            
+            // Extract scale and rotation components from transform matrix
+            // [a b c d e f] corresponds to the matrix:
+            // | a c e |
+            // | b d f |
+            // | 0 0 1 |
+            const a = transform[0];
+            const b = transform[1];
+            const c = transform[2];
+            const d = transform[3];
+            const e = transform[4]; // tx
+            const f = transform[5]; // ty
+            
+            // Calculate text angle from transform matrix
+            const angle = Math.atan2(b, a);
+            
+            // Calculate exact x,y position for the highlight, accounting for word position in text
+            // The PDF.js transform places text at baseline, not top
+            let tx = e;
+            let ty = f;
+            
+            // Apply rotation to the word offset if the text is rotated
+            if (angle !== 0) {
+                const cos = Math.cos(angle);
+                const sin = Math.sin(angle);
+                tx += beforeWordWidth * cos;
+                ty += beforeWordWidth * sin;
+            } else {
+                tx += beforeWordWidth;
+            }
+            
+            // Position the highlight element
+            const style = highlight.style;
+            
+            // Position x directly
+            style.left = tx + 'px';
+            
+            // For y, account for the fact that PDF coordinates have bottom-left origin
+            // while CSS has top-left origin
+            style.top = (viewport.height - ty) + 'px';
+            
+            // Set width/height accounting for rotation
+            if (angle !== 0) {
+                // For rotated text, we need to use transform
+                style.width = wordWidth + 'px';
+                style.height = fontSize + 'px';
+                
+                // Apply rotation using CSS transform
+                style.transformOrigin = '0 100%'; // Origin at bottom-left
+                style.transform = `rotate(${angle}rad)`;
+                
+                // Adjust position to account for the transform origin
+                style.top = (viewport.height - ty) + 'px';
+            } else {
+                // For horizontal text, just set width and height
+                style.width = wordWidth + 'px';
+                style.height = fontSize + 'px';
+                
+                // Move up by font height since PDF origin is at bottom
+                style.top = (viewport.height - ty - fontSize) + 'px';
+            }
+            
+            // Add debugging attributes for easier troubleshooting
+            highlight.setAttribute('data-word', actualWord);
+            highlight.setAttribute('data-pos', `${wordIndex} in "${originalText}"`);
+            highlight.setAttribute('data-coords', `tx:${tx}, ty:${ty}, angle:${angle}`);
+            
+            // Add to annotation layer
+            document.getElementById('pdf-annotation-layer').appendChild(highlight);
+        }
+        {% endif %}
     </script>
     {% endif %}
 </body>
